@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint → Type-check → Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: netflixgame_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test -- --reporter=verbose
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/netflixgame_test
+          NODE_ENV: test
+          JWT_SECRET: test_jwt_secret_not_for_production
+          JWT_REFRESH_SECRET: test_jwt_refresh_secret_not_for_production
+          OPENAI_API_KEY: sk-test-mocked
+          TMDB_API_KEY: test-mocked
+          TMDB_ACCESS_TOKEN: test-mocked
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
